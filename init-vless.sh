@@ -115,6 +115,15 @@ fi
 
 # 写入Xray配置文件（无分流规则，适配Passwall）
 CONFIG_PATH="/usr/local/etc/xray/config.json"
+mkdir -p /usr/local/var/log/xray
+
+# 检查并修改 systemd 服务文件为 root 启动
+SERVICE_FILE="/etc/systemd/system/xray.service"
+if [ -f "$SERVICE_FILE" ]; then
+  sed -i 's/^User=nobody/User=root/' "$SERVICE_FILE"
+  systemctl daemon-reload
+fi
+
 cat > $CONFIG_PATH <<EOF
 {
   "log": {
