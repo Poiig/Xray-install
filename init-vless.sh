@@ -20,21 +20,38 @@ if systemctl is-active --quiet xray || command -v xray &>/dev/null; then
         # 提取参数
         UUID=$(grep -oP '"id"\s*:\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
         PORT=$(grep -oP '"port"\s*:\s*\K[0-9]+' "$CONFIG_PATH" | head -n1)
-        PUBKEY=$(grep -oP '"publicKey"\s*:\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
-        if [ -z "$PUBKEY" ]; then
-          PUBKEY=$(grep -oP '"publicKey"\s*:\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
-        fi
+        PRIVKEY=$(grep -oP '"privateKey"\s*:\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
         SHORTID=$(grep -oP '"shortIds"\s*:\s*\[\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
         SNI=$(grep -oP '"serverNames"\s*:\s*\[\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
         [ -z "$SNI" ] && SNI="www.microsoft.com"
         IP=$(curl -s ifconfig.me)
         [ -z "$IP" ] && IP="你的服务器IP"
+        # 计算公钥
+        if command -v xray &>/dev/null && [ -n "$PRIVKEY" ]; then
+          PUBKEY=$(xray x25519 -i "$PRIVKEY" | grep "Public key" | awk '{print $3}')
+        else
+          PUBKEY=""
+        fi
         VLESS_LINK="vless://$UUID@$IP:$PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI&fp=chrome&pbk=$PUBKEY&sid=$SHORTID&type=tcp#Reality回国节点"
         echo
         echo "节点链接："
         echo "$VLESS_LINK"
         echo "$VLESS_LINK" > vless_link.txt
         echo "(节点链接已写入 vless_link.txt)"
+        echo
+        echo "配置详情（Passwall手动配置用）："
+        echo "  地址: $IP"
+        echo "  端口: $PORT"
+        echo "  UUID: $UUID"
+        echo "  加密: none"
+        echo "  流控: xtls-rprx-vision"
+        echo "  安全: reality"
+        echo "  SNI: $SNI"
+        echo "  指纹: chrome"
+        echo "  公钥: $PUBKEY"
+        echo "  ShortID: $SHORTID"
+        echo
+        echo "保存以上信息到Passwall，建议定期更换UUID和ShortID以提升安全性！"
       else
         echo "未找到配置文件 $CONFIG_PATH，无法输出节点链接。"
       fi
