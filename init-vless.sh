@@ -12,6 +12,37 @@ if systemctl is-active --quiet xray || command -v xray &>/dev/null; then
   read -p "是否继续安装并覆盖现有配置？(y/n): " confirm
   if [ "$confirm" != "y" ] && [ "$confirm" != "Y" ]; then
     echo "安装已取消，保留现有Xray配置。"
+    # 检查xray服务状态
+    if systemctl is-active --quiet xray; then
+      echo "检测到Xray服务正在运行，尝试读取现有配置并输出节点链接："
+      CONFIG_PATH="/usr/local/etc/xray/config.json"
+      if [ -f "$CONFIG_PATH" ]; then
+        # 提取参数
+        UUID=$(grep -oP '"id"\s*:\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
+        PORT=$(grep -oP '"port"\s*:\s*\K[0-9]+' "$CONFIG_PATH" | head -n1)
+        PUBKEY=$(grep -oP '"publicKey"\s*:\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
+        if [ -z "$PUBKEY" ]; then
+          PUBKEY=$(grep -oP '"publicKey"\s*:\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
+        fi
+        SHORTID=$(grep -oP '"shortIds"\s*:\s*\[\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
+        SNI=$(grep -oP '"serverNames"\s*:\s*\[\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
+        [ -z "$SNI" ] && SNI="www.microsoft.com"
+        IP=$(curl -s ifconfig.me)
+        [ -z "$IP" ] && IP="你的服务器IP"
+        VLESS_LINK="vless://$UUID@$IP:$PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI&fp=chrome&pbk=$PUBKEY&sid=$SHORTID&type=tcp#Reality回国节点"
+        echo
+        echo "节点链接："
+        echo "$VLESS_LINK"
+        echo "$VLESS_LINK" > vless_link.txt
+        echo "(节点链接已写入 vless_link.txt)"
+      else
+        echo "未找到配置文件 $CONFIG_PATH，无法输出节点链接。"
+      fi
+    else
+      echo "Xray服务未启动，将重新生成配置并重启Xray。"
+      # 重新生成配置和重启流程（跳转到生成配置部分）
+      # 由于脚本结构，直接继续后续生成配置部分即可
+    fi
     exit 0
   fi
 fi
@@ -37,17 +68,50 @@ PUBKEY=$(echo "$KEY_INFO" | grep "Public key" | awk '{print $3}')
 SHORTID=$(openssl rand -hex 4)
 SNI="www.microsoft.com" # 使用国际网站，降低GFW检测风险
 
-# 生成随机端口（1025-65535，排除常见端口）
-EXCLUDE_PORTS=(21 22 80 443 8080 8443 8000 8888 9000)
-while :; do
-  PORT=$((RANDOM%64511+1025))
-  if [[ ! " ${EXCLUDE_PORTS[*]} " =~ " ${PORT} " ]]; then
-    # 检查端口是否被占用
-    if ! ss -tuln | grep -q ":$PORT "; then
-      break
-    fi
-  fi
+# 解析参数，支持指定端口
+PORT_ARG=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -p|--port)
+      PORT_ARG="$2"
+      shift 2
+      ;;
+    *)
+      shift
+      ;;
+  esac
 done
+
+# 生成随机端口（1025-65535，排除常见端口）或使用用户指定端口
+EXCLUDE_PORTS=(21 22 80 443 8080 8443 8000 8888 9000)
+if [ -n "$PORT_ARG" ]; then
+  # 检查端口是否为数字且在合法范围
+  if ! [[ "$PORT_ARG" =~ ^[0-9]+$ ]] || [ "$PORT_ARG" -lt 1025 ] || [ "$PORT_ARG" -gt 65535 ]; then
+    echo "错误：指定端口无效，必须为1025-65535之间的数字！"
+    exit 1
+  fi
+  # 检查端口是否在排除列表
+  if [[ " ${EXCLUDE_PORTS[*]} " =~ " ${PORT_ARG} " ]]; then
+    echo "错误：指定端口为常见端口，出于安全考虑请更换其他端口！"
+    exit 1
+  fi
+  # 检查端口是否被占用
+  if ss -tuln | grep -q ":$PORT_ARG "; then
+    echo "错误：指定端口已被占用，请更换其他端口！"
+    exit 1
+  fi
+  PORT=$PORT_ARG
+else
+  while :; do
+    PORT=$((RANDOM%64511+1025))
+    if [[ ! " ${EXCLUDE_PORTS[*]} " =~ " ${PORT} " ]]; then
+      # 检查端口是否被占用
+      if ! ss -tuln | grep -q ":$PORT "; then
+        break
+      fi
+    fi
+  done
+fi
 
 # 写入Xray配置文件（无分流规则，适配Passwall）
 CONFIG_PATH="/usr/local/etc/xray/config.json"
@@ -116,13 +180,16 @@ if [ -z "$IP" ]; then
   IP="你的服务器IP"
 fi
 
-# 输出节点信息（适配Passwall）
+# 输出节点信息
 echo
 echo "✅ VLESS+REALITY 节点配置完成！"
 echo "以下信息可用于Passwall客户端（也支持Shadowrocket等）："
 echo
 echo "节点链接："
-echo "vless://$UUID@$IP:$PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI&fp=chrome&pbk=$PUBKEY&sid=$SHORTID&type=tcp#Reality回国节点"
+VLESS_LINK="vless://$UUID@$IP:$PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI&fp=chrome&pbk=$PUBKEY&sid=$SHORTID&type=tcp#Reality回国节点"
+echo "$VLESS_LINK"
+echo "$VLESS_LINK" > vless_link.txt
+echo "(节点链接已写入 vless_link.txt)"
 echo
 echo "配置详情（Passwall手动配置用）："
 echo "  地址: $IP"
