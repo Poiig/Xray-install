@@ -418,7 +418,7 @@ get_latest_version() {
   local i url_zip
   for i in "${!releases_list[@]}"; do
     releases_list["$i"]="v${releases_list[$i]#v}"
-    url_zip="https://github.com/XTLS/Xray-core/releases/download/${releases_list[$i]}/Xray-linux-$MACHINE.zip"
+    url_zip="https://gh-proxy.com/https://github.com/XTLS/Xray-core/releases/download/${releases_list[$i]}/Xray-linux-$MACHINE.zip"
     if grep -q "$url_zip" "$tmp_file"; then
       PRE_RELEASE_LATEST="${releases_list[$i]}"
       break
@@ -432,7 +432,7 @@ version_gt() {
 }
 
 download_xray() {
-  local DOWNLOAD_LINK="https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
+  local DOWNLOAD_LINK="https://gh-proxy.com/https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
   echo "Downloading Xray archive: $DOWNLOAD_LINK"
   if curl -f -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "$ZIP_FILE" "$DOWNLOAD_LINK"; then
     echo "ok."
@@ -694,8 +694,8 @@ install_geodata() {
       exit 1
     fi
   }
-  local download_link_geoip="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
-  local download_link_geosite="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+  local download_link_geoip="https://gh-proxy.com/https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+  local download_link_geosite="https://gh-proxy.com/https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
   local file_ip='geoip.dat'
   local file_dlc='geosite.dat'
   local file_site='geosite.dat'
