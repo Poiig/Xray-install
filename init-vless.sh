@@ -66,7 +66,7 @@ fi
 
 # 安装Xray
 echo "正在安装Xray..."
-if ! bash <(curl -L https://gh-proxy.com/https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh); then
+if ! bash <(curl -L https://ghfast.top/https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh); then
   echo "错误：Xray安装失败，请检查网络或脚本源！"
   exit 1
 fi
