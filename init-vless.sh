@@ -24,7 +24,7 @@ if systemctl is-active --quiet xray || command -v xray &>/dev/null; then
         SHORTID=$(grep -oP '"shortIds"\s*:\s*\[\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
         SNI=$(grep -oP '"serverNames"\s*:\s*\[\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
         [ -z "$SNI" ] && SNI="www.microsoft.com"
-        IP=$(curl -s ifconfig.me)
+        IP=$(curl -s ifconfig.io)
         [ -z "$IP" ] && IP="你的服务器IP"
         # 计算公钥
         if command -v xray &>/dev/null && [ -n "$PRIVKEY" ]; then
@@ -66,7 +66,7 @@ fi
 
 # 安装Xray
 echo "正在安装Xray..."
-if ! bash <(curl -L https://ghfast.top/https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh); then
+if ! bash <(curl -L https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh); then
   echo "错误：Xray安装失败，请检查网络或脚本源！"
   exit 1
 fi
