@@ -36,7 +36,7 @@ if systemctl is-active --quiet xray || command -v xray &>/dev/null; then
         else
           PUBKEY=""
         fi
-        VLESS_LINK="vless://$UUID@$IP:$PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI&fp=chrome&pbk=$PUBKEY&sid=$SHORTID&type=tcp#Reality回国节点-$IP"
+        VLESS_LINK="vless://$UUID@$IP:$PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI&fp=chrome&pbk=$PUBKEY&sid=$SHORTID&type=tcp#cn-$IP"
         echo
         echo "节点链接："
         echo "$VLESS_LINK"
@@ -216,7 +216,7 @@ echo "✅ VLESS+REALITY 节点配置完成！"
 echo "以下信息可用于Passwall客户端（也支持Shadowrocket等）："
 echo
 echo "节点链接："
-VLESS_LINK="vless://$UUID@$IP:$PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI&fp=chrome&pbk=$PUBKEY&sid=$SHORTID&type=tcp#Reality回国节点-$IP"
+VLESS_LINK="vless://$UUID@$IP:$PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI&fp=chrome&pbk=$PUBKEY&sid=$SHORTID&type=tcp#cn-$IP"
 echo "$VLESS_LINK"
 echo "$VLESS_LINK" > vless_link.txt
 echo "(节点链接已写入 vless_link.txt)"
