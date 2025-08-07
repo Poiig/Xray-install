@@ -24,12 +24,8 @@ if systemctl is-active --quiet xray || command -v xray &>/dev/null; then
         SHORTID=$(grep -oP '"shortIds"\s*:\s*\[\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
         SNI=$(grep -oP '"serverNames"\s*:\s*\[\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
         [ -z "$SNI" ] && SNI="www.microsoft.com"
-        # 这里改为使用传递的IP参数
-        if [ -n "$1" ]; then
-          IP="$1"
-        else
-          IP="你的服务器IP"
-        fi
+        IP=$(curl -s ifconfig.me)
+        [ -z "$IP" ] && IP="你的服务器IP"
         # 计算公钥
         if command -v xray &>/dev/null && [ -n "$PRIVKEY" ]; then
           PUBKEY=$(xray x25519 -i "$PRIVKEY" | grep "Public key" | awk '{print $3}')
@@ -203,12 +199,10 @@ else
   exit 1
 fi
 
-# 获取公网IP（通过参数传递）
-if [ -n "$1" ]; then
-  IP="$1"
-else
-  echo "警告：未传递IP参数，请手动确认服务器IP！"
-  IP="你的服务器IP"
+# 获取公网IP
+IP=$(curl -s ifconfig.me)
+if [ -z "$IP" ]; then
+  echo "警告：无法获取公网IP，请手动确认服务器IP！"
 fi
 # 输出节点信息
 echo
