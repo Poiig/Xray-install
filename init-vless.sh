@@ -6,6 +6,23 @@ if [ "$(id -u)" != "0" ]; then
   exit 1
 fi
 
+# 获取公网IP（15秒超时）
+echo "正在获取服务器公网IP..."
+IP=$(timeout 15 curl -s ifconfig.me)
+if [ -z "$IP" ]; then
+  echo "⚠️  无法自动获取公网IP（可能网络超时或服务器在内网）"
+  echo "请手动输入您的服务器公网IP地址："
+  read -p "服务器IP: " IP
+  if [ -z "$IP" ]; then
+    echo "❌ 未输入IP地址，使用默认值 '你的服务器IP'"
+    IP="你的服务器IP"
+  else
+    echo "✅ 已设置服务器IP: $IP"
+  fi
+else
+  echo "✅ 自动获取到服务器IP: $IP"
+fi
+
 # 检查Xray服务是否已存在
 if systemctl is-active --quiet xray || command -v xray &>/dev/null; then
   echo "警告：Xray服务或二进制文件已存在！"
@@ -24,8 +41,6 @@ if systemctl is-active --quiet xray || command -v xray &>/dev/null; then
         SHORTID=$(grep -oP '"shortIds"\s*:\s*\[\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
         SNI=$(grep -oP '"serverNames"\s*:\s*\[\s*"\K[^"]+' "$CONFIG_PATH" | head -n1)
         [ -z "$SNI" ] && SNI="www.microsoft.com"
-        IP=$(curl -s ifconfig.me)
-        [ -z "$IP" ] && IP="你的服务器IP"
         # 计算公钥
         if command -v xray &>/dev/null && [ -n "$PRIVKEY" ]; then
           PUBKEY=$(xray x25519 -i "$PRIVKEY" | grep "Public key" | awk '{print $3}')
@@ -197,12 +212,6 @@ if systemctl is-active --quiet xray; then
 else
   echo "错误：Xray服务启动失败，请检查配置！"
   exit 1
-fi
-
-# 获取公网IP
-IP=$(curl -s ifconfig.me)
-if [ -z "$IP" ]; then
-  echo "警告：无法获取公网IP，请手动确认服务器IP！"
 fi
 # 输出节点信息
 echo
