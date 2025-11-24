@@ -96,6 +96,7 @@ PROXY=''
 
 # --github-proxy ?
 # 默认使用 https://gh-proxy.com
+# 如果环境变量已设置，先保存，参数解析时会覆盖
 GITHUB_PROXY="${GITHUB_PROXY:-https://gh-proxy.com}"
 
 # --purge
@@ -444,9 +445,11 @@ version_gt() {
 }
 
 download_xray() {
-  local DOWNLOAD_LINK="https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
-  # 直接拼接代理地址
-  if [[ -n "$GITHUB_PROXY" ]]; then
+  # 直接硬编码原始 URL，避免环境变量影响
+  readonly RAW_DOWNLOAD_URL="https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
+  local DOWNLOAD_LINK="$RAW_DOWNLOAD_URL"
+  # 直接拼接代理地址（只对原始 github.com URL 添加代理）
+  if [[ -n "$GITHUB_PROXY" ]] && [[ "$DOWNLOAD_LINK" == https://github.com* ]]; then
     local proxy="${GITHUB_PROXY%/}"
     DOWNLOAD_LINK="${proxy}/${DOWNLOAD_LINK}"
   fi
@@ -715,13 +718,20 @@ install_geodata() {
       exit 1
     fi
   }
-  local download_link_geoip="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
-  local download_link_geosite="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
-  # 直接拼接代理地址
+  # 直接硬编码原始 URL，避免环境变量影响
+  readonly RAW_GEOIP_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+  readonly RAW_GEOSITE_URL="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+  local download_link_geoip="$RAW_GEOIP_URL"
+  local download_link_geosite="$RAW_GEOSITE_URL"
+  # 直接拼接代理地址（只对原始 github.com URL 添加代理）
   if [[ -n "$GITHUB_PROXY" ]]; then
     local proxy="${GITHUB_PROXY%/}"
-    download_link_geoip="${proxy}/${download_link_geoip}"
-    download_link_geosite="${proxy}/${download_link_geosite}"
+    if [[ "$download_link_geoip" == https://github.com* ]]; then
+      download_link_geoip="${proxy}/${download_link_geoip}"
+    fi
+    if [[ "$download_link_geosite" == https://github.com* ]]; then
+      download_link_geosite="${proxy}/${download_link_geosite}"
+    fi
   fi
   local file_ip='geoip.dat'
   local file_dlc='geosite.dat'
