@@ -115,8 +115,9 @@ convert_github_url() {
     return
   fi
   
-  # Check if URL is a GitHub URL
-  if [[ "$url" =~ ^https://(api\.)?github\.com/ ]] || [[ "$url" =~ ^https://github\.com/ ]]; then
+  # Only convert github.com URLs, not api.github.com URLs
+  # api.github.com should be accessed directly without mirror
+  if [[ "$url" =~ ^https://github\.com/ ]] && [[ ! "$url" =~ ^https://api\.github\.com/ ]]; then
     if [[ "$mirror" == "ghfast.top" ]]; then
       echo "https://ghfast.top/$url"
     elif [[ "$mirror" == "gh-proxy.com" ]]; then
@@ -131,13 +132,15 @@ convert_github_url() {
 
 # Detect available GitHub mirror
 detect_github_mirror() {
-  local test_url="https://api.github.com/repos/XTLS/Xray-core/releases/latest"
+  # Use github.com URL for testing, not api.github.com
+  # Test with a small file from GitHub releases
+  local test_url="https://github.com/XTLS/Xray-core/releases/latest"
   local temp_file
   temp_file="$(mktemp)"
   
   # Test ghfast.top
   if curl -sSfLo "$temp_file" --max-time 5 "https://ghfast.top/$test_url" >/dev/null 2>&1; then
-    if grep -q "tag_name" "$temp_file" 2>/dev/null; then
+    if grep -q "XTLS/Xray-core" "$temp_file" 2>/dev/null || [[ -s "$temp_file" ]]; then
       rm -f "$temp_file"
       echo "ghfast.top"
       return 0
@@ -149,7 +152,7 @@ detect_github_mirror() {
   
   # Test gh-proxy.com
   if curl -sSfLo "$temp_file" --max-time 5 "https://gh-proxy.com/$test_url" >/dev/null 2>&1; then
-    if grep -q "tag_name" "$temp_file" 2>/dev/null; then
+    if grep -q "XTLS/Xray-core" "$temp_file" 2>/dev/null || [[ -s "$temp_file" ]]; then
       rm -f "$temp_file"
       echo "gh-proxy.com"
       return 0
