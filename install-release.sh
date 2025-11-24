@@ -101,6 +101,44 @@ curl() {
   $(type -P curl) -L -q --retry 5 --retry-delay 10 --retry-max-time 60 "$@"
 }
 
+# 多源下载函数：尝试多个GitHub代理源下载文件
+download_with_multi_source() {
+  local ORIGINAL_URL="$1"
+  local OUTPUT_FILE="$2"
+  local PROXY_ARG="${3:-}"
+  
+  # 提取GitHub原始路径
+  local GITHUB_PATH=""
+  if [[ "$ORIGINAL_URL" =~ https://github.com/(.+) ]]; then
+    GITHUB_PATH="${BASH_REMATCH[1]}"
+  elif [[ "$ORIGINAL_URL" =~ https://[^/]+/https://github.com/(.+) ]]; then
+    GITHUB_PATH="${BASH_REMATCH[1]}"
+  else
+    # 如果不是GitHub URL，直接使用原始URL
+    if curl -f ${PROXY_ARG:+-x "$PROXY_ARG"} -R -H 'Cache-Control: no-cache' -o "$OUTPUT_FILE" "$ORIGINAL_URL" 2>/dev/null; then
+      return 0
+    fi
+    return 1
+  fi
+  
+  # 定义多个GitHub代理源（按优先级排序）
+  local GITHUB_SOURCES=(
+    "https://ghfast.top/https://github.com/${GITHUB_PATH}"
+    "https://gh-proxy.com/https://github.com/${GITHUB_PATH}"
+    "https://githubproxy.cc/https://github.com/${GITHUB_PATH}"
+    "https://github.com/${GITHUB_PATH}"
+  )
+  
+  # 尝试每个源
+  for SOURCE in "${GITHUB_SOURCES[@]}"; do
+    if curl -f ${PROXY_ARG:+-x "$PROXY_ARG"} -R -H 'Cache-Control: no-cache' -o "$OUTPUT_FILE" "$SOURCE" 2>/dev/null; then
+      return 0
+    fi
+  done
+  
+  return 1
+}
+
 systemd_cat_config() {
   if systemd-analyze --help | grep -qw 'cat-config'; then
     systemd-analyze --no-pager cat-config "$@"
@@ -417,8 +455,10 @@ get_latest_version() {
   local i url_zip
   for i in "${!releases_list[@]}"; do
     releases_list["$i"]="v${releases_list[$i]#v}"
-    url_zip="https://gh-proxy.com/https://github.com/XTLS/Xray-core/releases/download/${releases_list[$i]}/Xray-linux-$MACHINE.zip"
-    if grep -q "$url_zip" "$tmp_file"; then
+    # 检查多个可能的URL格式（因为tmp_file中可能包含不同代理源的URL或直接GitHub URL）
+    url_zip="https://github.com/XTLS/Xray-core/releases/download/${releases_list[$i]}/Xray-linux-$MACHINE.zip"
+    if grep -qE "(ghfast\.top|gh-proxy\.com|githubproxy\.cc|github\.com).*${releases_list[$i]}.*Xray-linux-$MACHINE\.zip" "$tmp_file" || \
+       grep -q "${releases_list[$i]}" "$tmp_file"; then
       PRE_RELEASE_LATEST="${releases_list[$i]}"
       break
     fi
@@ -431,21 +471,22 @@ version_gt() {
 }
 
 download_xray() {
-  local DOWNLOAD_LINK="https://ghfast.top/https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
-  echo "Downloading Xray archive: $DOWNLOAD_LINK"
-  if curl -f -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "$ZIP_FILE" "$DOWNLOAD_LINK"; then
-    echo "ok."
-  else
+  local BASE_URL="https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
+  echo "Downloading Xray archive from multiple sources..."
+  if ! download_with_multi_source "$BASE_URL" "$ZIP_FILE" "${PROXY}"; then
     echo 'error: Download failed! Please check your network or try again.'
     return 1
   fi
-  echo "Downloading verification file for Xray archive: ${DOWNLOAD_LINK}.dgst"
-  if curl -f -x "${PROXY}" -sSR -H 'Cache-Control: no-cache' -o "${ZIP_FILE}.dgst" "${DOWNLOAD_LINK}.dgst"; then
-    echo "ok."
-  else
+  echo "ok."
+  
+  local DGST_URL="${BASE_URL}.dgst"
+  echo "Downloading verification file for Xray archive from multiple sources..."
+  if ! download_with_multi_source "$DGST_URL" "${ZIP_FILE}.dgst" "${PROXY}"; then
     echo 'error: Download failed! Please check your network or try again.'
     return 1
   fi
+  echo "ok."
+  
   if grep 'Not Found' "${ZIP_FILE}.dgst"; then
     echo 'error: This version does not support verification. Please replace with another version.'
     return 1
@@ -687,25 +728,29 @@ EOF
 
 install_geodata() {
   download_geodata() {
-    if ! curl -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "${dir_tmp}/${2}" "${1}"; then
+    local BASE_URL="$1"
+    local OUTPUT_FILE="${dir_tmp}/${2}"
+    echo "Downloading ${2} from multiple sources..."
+    if ! download_with_multi_source "$BASE_URL" "$OUTPUT_FILE" "${PROXY}"; then
       echo 'error: Download failed! Please check your network or try again.'
       exit 1
     fi
-    if ! curl -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "${dir_tmp}/${2}.sha256sum" "${1}.sha256sum"; then
+    echo "Downloading ${2}.sha256sum from multiple sources..."
+    if ! download_with_multi_source "${BASE_URL}.sha256sum" "${OUTPUT_FILE}.sha256sum" "${PROXY}"; then
       echo 'error: Download failed! Please check your network or try again.'
       exit 1
     fi
   }
-  local download_link_geoip="https://gh-proxy.com/https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
-  local download_link_geosite="https://gh-proxy.com/https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+  local download_link_geoip="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
+  local download_link_geosite="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
   local file_ip='geoip.dat'
   local file_dlc='geosite.dat'
   local file_site='geosite.dat'
   local dir_tmp
   dir_tmp="$(mktemp -d)"
   [[ "$XRAY_IS_INSTALLED_BEFORE_RUNNING_SCRIPT" -eq '0' ]] && echo "warning: Xray was not installed"
-  download_geodata $download_link_geoip $file_ip
-  download_geodata $download_link_geosite $file_dlc
+  download_geodata "$download_link_geoip" "$file_ip"
+  download_geodata "$download_link_geosite" "$file_dlc"
   cd "${dir_tmp}" || exit
   for i in "${dir_tmp}"/*.sha256sum; do
     if ! sha256sum -c "${i}"; then
