@@ -115,7 +115,7 @@ download_with_multi_source() {
     GITHUB_PATH="${BASH_REMATCH[1]}"
   else
     # 如果不是GitHub URL，直接使用原始URL
-    if curl -f ${PROXY_ARG:+-x "$PROXY_ARG"} -R -H 'Cache-Control: no-cache' -o "$OUTPUT_FILE" "$ORIGINAL_URL" 2>/dev/null; then
+    if curl -f ${PROXY_ARG:+-x "$PROXY_ARG"} -R -H 'Cache-Control: no-cache' -o "$OUTPUT_FILE" "$ORIGINAL_URL"; then
       return 0
     fi
     return 1
@@ -130,10 +130,24 @@ download_with_multi_source() {
   )
   
   # 尝试每个源
+  local SOURCE_COUNT=${#GITHUB_SOURCES[@]}
+  local CURRENT_ATTEMPT=0
   for SOURCE in "${GITHUB_SOURCES[@]}"; do
-    if curl -f ${PROXY_ARG:+-x "$PROXY_ARG"} -R -H 'Cache-Control: no-cache' -o "$OUTPUT_FILE" "$SOURCE" 2>/dev/null; then
-      return 0
+    CURRENT_ATTEMPT=$((CURRENT_ATTEMPT + 1))
+    local SOURCE_NAME=$(echo "$SOURCE" | sed 's|https://||' | cut -d'/' -f1)
+    echo -n "[$CURRENT_ATTEMPT/$SOURCE_COUNT] 尝试从 $SOURCE_NAME 下载... "
+    
+    # 使用 curl 下载（静默模式，错误信息输出到 /dev/null）
+    # 检查 curl 的退出码和文件是否存在
+    if curl -f ${PROXY_ARG:+-x "$PROXY_ARG"} -R -H 'Cache-Control: no-cache' -L -sS -o "$OUTPUT_FILE" "$SOURCE" 2>/dev/null; then
+      # 检查文件是否下载成功（文件存在且大小大于0）
+      if [ -f "$OUTPUT_FILE" ] && [ -s "$OUTPUT_FILE" ]; then
+        echo "成功"
+        return 0
+      fi
     fi
+    echo "失败"
+    rm -f "$OUTPUT_FILE"
   done
   
   return 1
@@ -472,20 +486,18 @@ version_gt() {
 
 download_xray() {
   local BASE_URL="https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
-  echo "Downloading Xray archive from multiple sources..."
+  echo "Downloading Xray archive:"
   if ! download_with_multi_source "$BASE_URL" "$ZIP_FILE" "${PROXY}"; then
     echo 'error: Download failed! Please check your network or try again.'
     return 1
   fi
-  echo "ok."
   
   local DGST_URL="${BASE_URL}.dgst"
-  echo "Downloading verification file for Xray archive from multiple sources..."
+  echo "Downloading verification file:"
   if ! download_with_multi_source "$DGST_URL" "${ZIP_FILE}.dgst" "${PROXY}"; then
     echo 'error: Download failed! Please check your network or try again.'
     return 1
   fi
-  echo "ok."
   
   if grep 'Not Found' "${ZIP_FILE}.dgst"; then
     echo 'error: This version does not support verification. Please replace with another version.'
