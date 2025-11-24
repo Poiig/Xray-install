@@ -106,9 +106,10 @@ curl() {
 }
 
 # Function to add GitHub proxy prefix to URLs
+# Only add proxy for https://github.com URLs, not for https://api.github.com
 add_github_proxy() {
   local url="$1"
-  if [[ -n "$GITHUB_PROXY" ]] && [[ "$url" == *"github.com"* ]]; then
+  if [[ -n "$GITHUB_PROXY" ]] && [[ "$url" == https://github.com* ]] && [[ "$url" != *"api.github.com"* ]]; then
     # 确保代理地址以 / 结尾，避免拼接错误
     local proxy="${GITHUB_PROXY%/}"
     echo "${proxy}/${url}"
