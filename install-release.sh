@@ -94,89 +94,24 @@ LOCAL_FILE=''
 # --proxy ?
 PROXY=''
 
+# --github-proxy ?
+# 默认使用 https://gh-proxy.com
+GITHUB_PROXY="${GITHUB_PROXY:-https://gh-proxy.com}"
+
 # --purge
 PURGE='0'
-
-# GitHub mirror configuration
-# Can be set to: 'ghfast.top', 'gh-proxy.com', 'auto' (auto detect), or empty (no mirror)
-GITHUB_MIRROR=${GITHUB_MIRROR:-auto}
 
 curl() {
   $(type -P curl) -L -q --retry 5 --retry-delay 10 --retry-max-time 60 "$@"
 }
 
-# Convert GitHub URL to use mirror if enabled
-convert_github_url() {
+# Function to add GitHub proxy prefix to URLs
+add_github_proxy() {
   local url="$1"
-  local mirror="$2"
-  
-  if [[ -z "$mirror" ]] || [[ "$mirror" == "none" ]]; then
-    echo "$url"
-    return
-  fi
-  
-  # Only convert github.com URLs, not api.github.com URLs
-  # api.github.com should be accessed directly without mirror
-  if [[ "$url" =~ ^https://github\.com/ ]] && [[ ! "$url" =~ ^https://api\.github\.com/ ]]; then
-    if [[ "$mirror" == "ghfast.top" ]]; then
-      echo "https://ghfast.top/$url"
-    elif [[ "$mirror" == "gh-proxy.com" ]]; then
-      echo "https://gh-proxy.com/$url"
-    else
-      echo "$url"
-    fi
+  if [[ -n "$GITHUB_PROXY" ]] && [[ "$url" == *"github.com"* ]]; then
+    echo "${GITHUB_PROXY}${url}"
   else
     echo "$url"
-  fi
-}
-
-# Detect available GitHub mirror
-detect_github_mirror() {
-  # Use github.com URL for testing, not api.github.com
-  # Test with a small file from GitHub releases
-  local test_url="https://github.com/XTLS/Xray-core/releases/latest"
-  local temp_file
-  temp_file="$(mktemp)"
-  
-  # Test ghfast.top
-  if curl -sSfLo "$temp_file" --max-time 5 "https://ghfast.top/$test_url" >/dev/null 2>&1; then
-    if grep -q "XTLS/Xray-core" "$temp_file" 2>/dev/null || [[ -s "$temp_file" ]]; then
-      rm -f "$temp_file"
-      echo "ghfast.top"
-      return 0
-    fi
-  fi
-  
-  rm -f "$temp_file"
-  temp_file="$(mktemp)"
-  
-  # Test gh-proxy.com
-  if curl -sSfLo "$temp_file" --max-time 5 "https://gh-proxy.com/$test_url" >/dev/null 2>&1; then
-    if grep -q "XTLS/Xray-core" "$temp_file" 2>/dev/null || [[ -s "$temp_file" ]]; then
-      rm -f "$temp_file"
-      echo "gh-proxy.com"
-      return 0
-    fi
-  fi
-  
-  rm -f "$temp_file"
-  echo "none"
-  return 1
-}
-
-# Initialize GitHub mirror
-init_github_mirror() {
-  if [[ "$GITHUB_MIRROR" == "auto" ]]; then
-    echo "info: Detecting available GitHub mirror..."
-    GITHUB_MIRROR="$(detect_github_mirror)"
-    if [[ "$GITHUB_MIRROR" != "none" ]]; then
-      echo "info: Using GitHub mirror: $GITHUB_MIRROR"
-    else
-      echo "info: No available GitHub mirror detected, using direct connection"
-      GITHUB_MIRROR="none"
-    fi
-  elif [[ -n "$GITHUB_MIRROR" ]] && [[ "$GITHUB_MIRROR" != "none" ]]; then
-    echo "info: Using specified GitHub mirror: $GITHUB_MIRROR"
   fi
 }
 
@@ -365,6 +300,14 @@ judgment_parameters() {
       PROXY="$2"
       shift
       ;;
+    '--github-proxy')
+      if [[ -z "$2" ]]; then
+        echo "error: Please specify the GitHub proxy address."
+        return 1
+      fi
+      GITHUB_PROXY="$2"
+      shift
+      ;;
     '-u' | '--install-user')
       if [[ -z "$2" ]]; then
         echo "error: Please specify the install user.}"
@@ -453,7 +396,7 @@ get_latest_version() {
   local tmp_file
   tmp_file="$(mktemp)"
   local url='https://api.github.com/repos/XTLS/Xray-core/releases/latest'
-  url="$(convert_github_url "$url" "$GITHUB_MIRROR")"
+  url="$(add_github_proxy "$url")"
   if curl -x "${PROXY}" -sSfLo "$tmp_file" -H "Accept: application/vnd.github.v3+json" "$url"; then
     echo "get release list success"
   else
@@ -475,7 +418,7 @@ get_latest_version() {
   "rm" "$tmp_file"
   RELEASE_LATEST="v${RELEASE_LATEST#v}"
   url='https://api.github.com/repos/XTLS/Xray-core/releases'
-  url="$(convert_github_url "$url" "$GITHUB_MIRROR")"
+  url="$(add_github_proxy "$url")"
   if curl -x "${PROXY}" -sSfLo "$tmp_file" -H "Accept: application/vnd.github.v3+json" "$url"; then
     echo "get release list success"
   else
@@ -513,7 +456,7 @@ version_gt() {
 
 download_xray() {
   local DOWNLOAD_LINK="https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
-  DOWNLOAD_LINK="$(convert_github_url "$DOWNLOAD_LINK" "$GITHUB_MIRROR")"
+  DOWNLOAD_LINK="$(add_github_proxy "$DOWNLOAD_LINK")"
   echo "Downloading Xray archive: $DOWNLOAD_LINK"
   if curl -f -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "$ZIP_FILE" "$DOWNLOAD_LINK"; then
     echo "ok."
@@ -770,21 +713,19 @@ EOF
 
 install_geodata() {
   download_geodata() {
-    local url="${1}"
-    url="$(convert_github_url "$url" "$GITHUB_MIRROR")"
-    if ! curl -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "${dir_tmp}/${2}" "$url"; then
+    if ! curl -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "${dir_tmp}/${2}" "${1}"; then
       echo 'error: Download failed! Please check your network or try again.'
       exit 1
     fi
-    local url_sha256sum="${1}.sha256sum"
-    url_sha256sum="$(convert_github_url "$url_sha256sum" "$GITHUB_MIRROR")"
-    if ! curl -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "${dir_tmp}/${2}.sha256sum" "$url_sha256sum"; then
+    if ! curl -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "${dir_tmp}/${2}.sha256sum" "${1}.sha256sum"; then
       echo 'error: Download failed! Please check your network or try again.'
       exit 1
     fi
   }
   local download_link_geoip="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
   local download_link_geosite="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
+  download_link_geoip="$(add_github_proxy "$download_link_geoip")"
+  download_link_geosite="$(add_github_proxy "$download_link_geosite")"
   local file_ip='geoip.dat'
   local file_dlc='geosite.dat'
   local file_site='geosite.dat'
@@ -891,8 +832,9 @@ show_help() {
   echo '    -f, --force               Force install even though the versions are same'
   echo '    --beta                    Install the pre-release version if it is exist'
   echo '    -l, --local               Install Xray from a local file'
-  echo '    -p, --proxy               Download through a proxy server, e.g., -p http://127.0.0.1:8118 or -p socks5://127.0.0.1:1080'
-  echo '    -u, --install-user        Install Xray in specified user, e.g, -u root'
+  echo '        -p, --proxy               Download through a proxy server, e.g., -p http://127.0.0.1:8118 or -p socks5://127.0.0.1:1080'
+    echo '    --github-proxy            Add proxy prefix to GitHub URLs, e.g., --github-proxy https://ghproxy.com/'
+    echo '    -u, --install-user        Install Xray in specified user, e.g, -u root'
   echo '    --reinstall               Reinstall current Xray version'
   echo "    --no-update-service       Don't change service files if they are exist"
   echo "    --without-geodata         Don't install/update geoip.dat and geosite.dat"
@@ -901,10 +843,12 @@ show_help() {
   echo "                              [time] need be in the format of 12:34:56, under 10:00:00 should be start with 0, e.g. 01:23:45."
   echo '  install-geodata:'
   echo '    -p, --proxy               Download through a proxy server'
+  echo '    --github-proxy            Add proxy prefix to GitHub URLs'
   echo '  remove:'
   echo '    --purge                   Remove all the Xray files, include logs, configs, etc'
   echo '  check:'
   echo '    -p, --proxy               Check new version through a proxy server'
+  echo '    --github-proxy            Add proxy prefix to GitHub URLs'
   exit 0
 }
 
@@ -918,11 +862,6 @@ main() {
   green=$(tput setaf 2)
   aoi=$(tput setaf 6)
   reset=$(tput sgr0)
-
-  # Initialize GitHub mirror if needed
-  if [[ "$HELP" -eq '0' ]] && [[ "$REMOVE" -eq '0' ]]; then
-    init_github_mirror
-  fi
 
   # Parameter information
   [[ "$HELP" -eq '1' ]] && show_help

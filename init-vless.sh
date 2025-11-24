@@ -1,5 +1,27 @@
 #!/bin/bash
 
+# 解析命令行参数
+# 默认使用 https://gh-proxy.com
+GITHUB_PROXY="${GITHUB_PROXY:-https://gh-proxy.com}"
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --github-proxy)
+      if [ -z "$2" ]; then
+        echo "错误：请指定 GitHub 代理地址"
+        exit 1
+      fi
+      GITHUB_PROXY="$2"
+      shift 2
+      ;;
+    *)
+      echo "未知参数: $1"
+      echo "用法: $0 [--github-proxy <代理地址>]"
+      echo "      如果不指定 --github-proxy，默认使用 https://gh-proxy.com"
+      exit 1
+      ;;
+  esac
+done
+
 # 检查是否为root用户
 if [ "$(id -u)" != "0" ]; then
   echo "错误：请以root用户运行此脚本！"
@@ -136,63 +158,59 @@ fi
 # 安装Xray
 echo "正在安装Xray..."
 
-# 定义多个GitHub代理源（按优先级排序）
-GITHUB_SOURCES=(
-  "https://ghfast.top/https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh"
-  "https://gh-proxy.com/https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh"
-  "https://githubproxy.cc/https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh"
-  "https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh"
-)
-
-INSTALL_SUCCESS=0
-SOURCE_COUNT=${#GITHUB_SOURCES[@]}
-CURRENT_ATTEMPT=0
+# 使用传入的代理地址或默认值构建下载 URL
+GITHUB_RAW_URL="https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh"
+DOWNLOAD_URL="${GITHUB_PROXY}${GITHUB_RAW_URL}"
 TEMP_SCRIPT="/tmp/install-release.sh"
 
-# 先下载安装脚本到本地
-for SOURCE in "${GITHUB_SOURCES[@]}"; do
-  CURRENT_ATTEMPT=$((CURRENT_ATTEMPT + 1))
-  echo "[$CURRENT_ATTEMPT/$SOURCE_COUNT] 尝试从源下载安装脚本: $(echo "$SOURCE" | sed 's|https://||' | cut -d'/' -f1)"
-  
-  # 下载脚本内容
-  SCRIPT_CONTENT=$(curl -sL --max-time 10 "$SOURCE" 2>/dev/null)
-  
-  if [ -z "$SCRIPT_CONTENT" ]; then
-    echo "⚠️  源无响应或超时，尝试下一个..."
-    continue
-  fi
-  
-  # 检查是否是HTML错误页面（包含常见的HTML标签）
-  if echo "$SCRIPT_CONTENT" | grep -qiE "<html|<head|<title|<!DOCTYPE"; then
-    echo "⚠️  源返回HTML错误页面，尝试下一个..."
-    continue
-  fi
-  
-  # 检查是否是有效的bash脚本
-  if ! echo "$SCRIPT_CONTENT" | head -n 1 | grep -qE "#!/usr/bin/env bash|#!/bin/bash"; then
-    echo "⚠️  源返回的内容不是有效的bash脚本，尝试下一个..."
-    continue
-  fi
-  
-  # 保存脚本到临时文件（清理可能存在的旧文件）
-  rm -f "$TEMP_SCRIPT"
-  echo "$SCRIPT_CONTENT" > "$TEMP_SCRIPT"
-  chmod +x "$TEMP_SCRIPT"
-  INSTALL_SUCCESS=1
-  echo "✅ 脚本下载成功！保存到: $TEMP_SCRIPT"
-  break
-done
+echo "使用 GitHub 代理: $GITHUB_PROXY"
+echo "下载地址: $DOWNLOAD_URL"
 
-if [ "$INSTALL_SUCCESS" -eq 0 ]; then
-  echo "❌ 错误：所有源都失败，无法下载安装脚本！"
+# 下载安装脚本到本地
+echo "正在下载安装脚本..."
+SCRIPT_CONTENT=$(curl -sL --max-time 30 "$DOWNLOAD_URL" 2>/dev/null)
+
+if [ -z "$SCRIPT_CONTENT" ]; then
+  echo "⚠️  使用代理下载失败，尝试直接下载..."
+  SCRIPT_CONTENT=$(curl -sL --max-time 30 "$GITHUB_RAW_URL" 2>/dev/null)
+fi
+
+if [ -z "$SCRIPT_CONTENT" ]; then
+  echo "❌ 错误：无法下载安装脚本！"
   echo "请检查网络连接或手动安装Xray。"
-  rm -f "$TEMP_SCRIPT"
   exit 1
 fi
 
+# 检查是否是HTML错误页面（包含常见的HTML标签）
+if echo "$SCRIPT_CONTENT" | grep -qiE "<html|<head|<title|<!DOCTYPE"; then
+  echo "⚠️  返回HTML错误页面，尝试直接下载..."
+  SCRIPT_CONTENT=$(curl -sL --max-time 30 "$GITHUB_RAW_URL" 2>/dev/null)
+  if echo "$SCRIPT_CONTENT" | grep -qiE "<html|<head|<title|<!DOCTYPE"; then
+    echo "❌ 错误：无法下载有效的安装脚本！"
+    exit 1
+  fi
+fi
+
+# 检查是否是有效的bash脚本
+if ! echo "$SCRIPT_CONTENT" | head -n 1 | grep -qE "#!/usr/bin/env bash|#!/bin/bash"; then
+  echo "❌ 错误：下载的内容不是有效的bash脚本！"
+  exit 1
+fi
+
+# 保存脚本到临时文件
+rm -f "$TEMP_SCRIPT"
+echo "$SCRIPT_CONTENT" > "$TEMP_SCRIPT"
+chmod +x "$TEMP_SCRIPT"
+echo "✅ 脚本下载成功！保存到: $TEMP_SCRIPT"
+
 # 使用本地脚本执行安装（使用bash -c保持与官方命令一致的行为）
 echo "正在执行本地安装脚本..."
-if bash -c "$(cat "$TEMP_SCRIPT")" @ install; then
+INSTALL_ARGS="install"
+if [ -n "$GITHUB_PROXY" ]; then
+  INSTALL_ARGS="$INSTALL_ARGS --github-proxy $GITHUB_PROXY"
+  echo "使用 GitHub 代理: $GITHUB_PROXY"
+fi
+if bash -c "$(cat "$TEMP_SCRIPT")" @ $INSTALL_ARGS; then
   echo "✅ Xray安装成功！"
   rm -f "$TEMP_SCRIPT"
 else
