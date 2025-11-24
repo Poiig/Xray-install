@@ -159,10 +159,11 @@ fi
 echo "正在安装Xray..."
 
 # 使用传入的代理地址或默认值构建下载 URL
-GITHUB_RAW_URL="https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh"
+# 直接硬编码原始 URL，避免环境变量影响
+readonly RAW_SCRIPT_URL="https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh"
 # 确保代理地址以 / 结尾，避免拼接错误
 GITHUB_PROXY_NORMALIZED="${GITHUB_PROXY%/}"
-DOWNLOAD_URL="${GITHUB_PROXY_NORMALIZED}/${GITHUB_RAW_URL}"
+DOWNLOAD_URL="${GITHUB_PROXY_NORMALIZED}/${RAW_SCRIPT_URL}"
 TEMP_SCRIPT="/tmp/install-release.sh"
 
 echo "使用 GitHub 代理: $GITHUB_PROXY"
@@ -174,7 +175,7 @@ SCRIPT_CONTENT=$(curl -sL --max-time 30 "$DOWNLOAD_URL" 2>/dev/null)
 
 if [ -z "$SCRIPT_CONTENT" ]; then
   echo "⚠️  使用代理下载失败，尝试直接下载..."
-  SCRIPT_CONTENT=$(curl -sL --max-time 30 "$GITHUB_RAW_URL" 2>/dev/null)
+  SCRIPT_CONTENT=$(curl -sL --max-time 30 "$RAW_SCRIPT_URL" 2>/dev/null)
 fi
 
 if [ -z "$SCRIPT_CONTENT" ]; then
@@ -186,7 +187,7 @@ fi
 # 检查是否是HTML错误页面（包含常见的HTML标签）
 if echo "$SCRIPT_CONTENT" | grep -qiE "<html|<head|<title|<!DOCTYPE"; then
   echo "⚠️  返回HTML错误页面，尝试直接下载..."
-  SCRIPT_CONTENT=$(curl -sL --max-time 30 "$GITHUB_RAW_URL" 2>/dev/null)
+  SCRIPT_CONTENT=$(curl -sL --max-time 30 "$RAW_SCRIPT_URL" 2>/dev/null)
   if echo "$SCRIPT_CONTENT" | grep -qiE "<html|<head|<title|<!DOCTYPE"; then
     echo "❌ 错误：无法下载有效的安装脚本！"
     exit 1

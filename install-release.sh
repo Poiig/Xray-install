@@ -105,18 +105,6 @@ curl() {
   $(type -P curl) -L -q --retry 5 --retry-delay 10 --retry-max-time 60 "$@"
 }
 
-# Function to add GitHub proxy prefix to URLs
-# Only add proxy for https://github.com URLs, not for https://api.github.com
-add_github_proxy() {
-  local url="$1"
-  if [[ -n "$GITHUB_PROXY" ]] && [[ "$url" == https://github.com* ]] && [[ "$url" != *"api.github.com"* ]]; then
-    # 确保代理地址以 / 结尾，避免拼接错误
-    local proxy="${GITHUB_PROXY%/}"
-    echo "${proxy}/${url}"
-  else
-    echo "$url"
-  fi
-}
 
 systemd_cat_config() {
   if systemd-analyze --help | grep -qw 'cat-config'; then
@@ -399,7 +387,6 @@ get_latest_version() {
   local tmp_file
   tmp_file="$(mktemp)"
   local url='https://api.github.com/repos/XTLS/Xray-core/releases/latest'
-  url="$(add_github_proxy "$url")"
   if curl -x "${PROXY}" -sSfLo "$tmp_file" -H "Accept: application/vnd.github.v3+json" "$url"; then
     echo "get release list success"
   else
@@ -421,7 +408,6 @@ get_latest_version() {
   "rm" "$tmp_file"
   RELEASE_LATEST="v${RELEASE_LATEST#v}"
   url='https://api.github.com/repos/XTLS/Xray-core/releases'
-  url="$(add_github_proxy "$url")"
   if curl -x "${PROXY}" -sSfLo "$tmp_file" -H "Accept: application/vnd.github.v3+json" "$url"; then
     echo "get release list success"
   else
@@ -459,7 +445,11 @@ version_gt() {
 
 download_xray() {
   local DOWNLOAD_LINK="https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
-  DOWNLOAD_LINK="$(add_github_proxy "$DOWNLOAD_LINK")"
+  # 直接拼接代理地址
+  if [[ -n "$GITHUB_PROXY" ]]; then
+    local proxy="${GITHUB_PROXY%/}"
+    DOWNLOAD_LINK="${proxy}/${DOWNLOAD_LINK}"
+  fi
   echo "Downloading Xray archive: $DOWNLOAD_LINK"
   if curl -f -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "$ZIP_FILE" "$DOWNLOAD_LINK"; then
     echo "ok."
@@ -727,8 +717,12 @@ install_geodata() {
   }
   local download_link_geoip="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geoip.dat"
   local download_link_geosite="https://github.com/Loyalsoldier/v2ray-rules-dat/releases/latest/download/geosite.dat"
-  download_link_geoip="$(add_github_proxy "$download_link_geoip")"
-  download_link_geosite="$(add_github_proxy "$download_link_geosite")"
+  # 直接拼接代理地址
+  if [[ -n "$GITHUB_PROXY" ]]; then
+    local proxy="${GITHUB_PROXY%/}"
+    download_link_geoip="${proxy}/${download_link_geoip}"
+    download_link_geosite="${proxy}/${download_link_geosite}"
+  fi
   local file_ip='geoip.dat'
   local file_dlc='geosite.dat'
   local file_site='geosite.dat'
