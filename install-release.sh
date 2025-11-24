@@ -97,60 +97,84 @@ PROXY=''
 # --purge
 PURGE='0'
 
+# GitHub mirror configuration
+# Can be set to: 'ghfast.top', 'gh-proxy.com', 'auto' (auto detect), or empty (no mirror)
+GITHUB_MIRROR=${GITHUB_MIRROR:-auto}
+
 curl() {
   $(type -P curl) -L -q --retry 5 --retry-delay 10 --retry-max-time 60 "$@"
 }
 
-# 多源下载函数：尝试多个GitHub代理源下载文件
-download_with_multi_source() {
-  local ORIGINAL_URL="$1"
-  local OUTPUT_FILE="$2"
-  local PROXY_ARG="${3:-}"
+# Convert GitHub URL to use mirror if enabled
+convert_github_url() {
+  local url="$1"
+  local mirror="$2"
   
-  # 提取GitHub原始路径
-  local GITHUB_PATH=""
-  if [[ "$ORIGINAL_URL" =~ https://github.com/(.+) ]]; then
-    GITHUB_PATH="${BASH_REMATCH[1]}"
-  elif [[ "$ORIGINAL_URL" =~ https://[^/]+/https://github.com/(.+) ]]; then
-    GITHUB_PATH="${BASH_REMATCH[1]}"
-  else
-    # 如果不是GitHub URL，直接使用原始URL
-    if curl -f ${PROXY_ARG:+-x "$PROXY_ARG"} -R -H 'Cache-Control: no-cache' -o "$OUTPUT_FILE" "$ORIGINAL_URL"; then
-      return 0
-    fi
-    return 1
+  if [[ -z "$mirror" ]] || [[ "$mirror" == "none" ]]; then
+    echo "$url"
+    return
   fi
   
-  # 定义多个GitHub代理源（按优先级排序）
-  local GITHUB_SOURCES=(
-    "https://ghfast.top/https://github.com/${GITHUB_PATH}"
-    "https://gh-proxy.com/https://github.com/${GITHUB_PATH}"
-    "https://githubproxy.cc/https://github.com/${GITHUB_PATH}"
-    "https://github.com/${GITHUB_PATH}"
-  )
-  
-  # 尝试每个源
-  local SOURCE_COUNT=${#GITHUB_SOURCES[@]}
-  local CURRENT_ATTEMPT=0
-  for SOURCE in "${GITHUB_SOURCES[@]}"; do
-    CURRENT_ATTEMPT=$((CURRENT_ATTEMPT + 1))
-    local SOURCE_NAME=$(echo "$SOURCE" | sed 's|https://||' | cut -d'/' -f1)
-    echo -n "[$CURRENT_ATTEMPT/$SOURCE_COUNT] 尝试从 $SOURCE_NAME 下载... "
-    
-    # 使用 curl 下载（静默模式，错误信息输出到 /dev/null）
-    # 检查 curl 的退出码和文件是否存在
-    if curl -f ${PROXY_ARG:+-x "$PROXY_ARG"} -R -H 'Cache-Control: no-cache' -L -sS -o "$OUTPUT_FILE" "$SOURCE" 2>/dev/null; then
-      # 检查文件是否下载成功（文件存在且大小大于0）
-      if [ -f "$OUTPUT_FILE" ] && [ -s "$OUTPUT_FILE" ]; then
-        echo "成功"
-        return 0
-      fi
+  # Check if URL is a GitHub URL
+  if [[ "$url" =~ ^https://(api\.)?github\.com/ ]] || [[ "$url" =~ ^https://github\.com/ ]]; then
+    if [[ "$mirror" == "ghfast.top" ]]; then
+      echo "https://ghfast.top/$url"
+    elif [[ "$mirror" == "gh-proxy.com" ]]; then
+      echo "https://gh-proxy.com/$url"
+    else
+      echo "$url"
     fi
-    echo "失败"
-    rm -f "$OUTPUT_FILE"
-  done
+  else
+    echo "$url"
+  fi
+}
+
+# Detect available GitHub mirror
+detect_github_mirror() {
+  local test_url="https://api.github.com/repos/XTLS/Xray-core/releases/latest"
+  local temp_file
+  temp_file="$(mktemp)"
   
+  # Test ghfast.top
+  if curl -sSfLo "$temp_file" --max-time 5 "https://ghfast.top/$test_url" >/dev/null 2>&1; then
+    if grep -q "tag_name" "$temp_file" 2>/dev/null; then
+      rm -f "$temp_file"
+      echo "ghfast.top"
+      return 0
+    fi
+  fi
+  
+  rm -f "$temp_file"
+  temp_file="$(mktemp)"
+  
+  # Test gh-proxy.com
+  if curl -sSfLo "$temp_file" --max-time 5 "https://gh-proxy.com/$test_url" >/dev/null 2>&1; then
+    if grep -q "tag_name" "$temp_file" 2>/dev/null; then
+      rm -f "$temp_file"
+      echo "gh-proxy.com"
+      return 0
+    fi
+  fi
+  
+  rm -f "$temp_file"
+  echo "none"
   return 1
+}
+
+# Initialize GitHub mirror
+init_github_mirror() {
+  if [[ "$GITHUB_MIRROR" == "auto" ]]; then
+    echo "info: Detecting available GitHub mirror..."
+    GITHUB_MIRROR="$(detect_github_mirror)"
+    if [[ "$GITHUB_MIRROR" != "none" ]]; then
+      echo "info: Using GitHub mirror: $GITHUB_MIRROR"
+    else
+      echo "info: No available GitHub mirror detected, using direct connection"
+      GITHUB_MIRROR="none"
+    fi
+  elif [[ -n "$GITHUB_MIRROR" ]] && [[ "$GITHUB_MIRROR" != "none" ]]; then
+    echo "info: Using specified GitHub mirror: $GITHUB_MIRROR"
+  fi
 }
 
 systemd_cat_config() {
@@ -426,6 +450,7 @@ get_latest_version() {
   local tmp_file
   tmp_file="$(mktemp)"
   local url='https://api.github.com/repos/XTLS/Xray-core/releases/latest'
+  url="$(convert_github_url "$url" "$GITHUB_MIRROR")"
   if curl -x "${PROXY}" -sSfLo "$tmp_file" -H "Accept: application/vnd.github.v3+json" "$url"; then
     echo "get release list success"
   else
@@ -447,6 +472,7 @@ get_latest_version() {
   "rm" "$tmp_file"
   RELEASE_LATEST="v${RELEASE_LATEST#v}"
   url='https://api.github.com/repos/XTLS/Xray-core/releases'
+  url="$(convert_github_url "$url" "$GITHUB_MIRROR")"
   if curl -x "${PROXY}" -sSfLo "$tmp_file" -H "Accept: application/vnd.github.v3+json" "$url"; then
     echo "get release list success"
   else
@@ -469,10 +495,8 @@ get_latest_version() {
   local i url_zip
   for i in "${!releases_list[@]}"; do
     releases_list["$i"]="v${releases_list[$i]#v}"
-    # 检查多个可能的URL格式（因为tmp_file中可能包含不同代理源的URL或直接GitHub URL）
     url_zip="https://github.com/XTLS/Xray-core/releases/download/${releases_list[$i]}/Xray-linux-$MACHINE.zip"
-    if grep -qE "(ghfast\.top|gh-proxy\.com|githubproxy\.cc|github\.com).*${releases_list[$i]}.*Xray-linux-$MACHINE\.zip" "$tmp_file" || \
-       grep -q "${releases_list[$i]}" "$tmp_file"; then
+    if grep -q "$url_zip" "$tmp_file"; then
       PRE_RELEASE_LATEST="${releases_list[$i]}"
       break
     fi
@@ -485,20 +509,23 @@ version_gt() {
 }
 
 download_xray() {
-  local BASE_URL="https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
-  echo "Downloading Xray archive:"
-  if ! download_with_multi_source "$BASE_URL" "$ZIP_FILE" "${PROXY}"; then
+  local DOWNLOAD_LINK="https://github.com/XTLS/Xray-core/releases/download/${INSTALL_VERSION}/Xray-linux-${MACHINE}.zip"
+  DOWNLOAD_LINK="$(convert_github_url "$DOWNLOAD_LINK" "$GITHUB_MIRROR")"
+  echo "Downloading Xray archive: $DOWNLOAD_LINK"
+  if curl -f -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "$ZIP_FILE" "$DOWNLOAD_LINK"; then
+    echo "ok."
+  else
     echo 'error: Download failed! Please check your network or try again.'
     return 1
   fi
-  
-  local DGST_URL="${BASE_URL}.dgst"
-  echo "Downloading verification file:"
-  if ! download_with_multi_source "$DGST_URL" "${ZIP_FILE}.dgst" "${PROXY}"; then
+  local DOWNLOAD_LINK_DGST="${DOWNLOAD_LINK}.dgst"
+  echo "Downloading verification file for Xray archive: ${DOWNLOAD_LINK_DGST}"
+  if curl -f -x "${PROXY}" -sSR -H 'Cache-Control: no-cache' -o "${ZIP_FILE}.dgst" "${DOWNLOAD_LINK_DGST}"; then
+    echo "ok."
+  else
     echo 'error: Download failed! Please check your network or try again.'
     return 1
   fi
-  
   if grep 'Not Found' "${ZIP_FILE}.dgst"; then
     echo 'error: This version does not support verification. Please replace with another version.'
     return 1
@@ -740,15 +767,15 @@ EOF
 
 install_geodata() {
   download_geodata() {
-    local BASE_URL="$1"
-    local OUTPUT_FILE="${dir_tmp}/${2}"
-    echo "Downloading ${2} from multiple sources..."
-    if ! download_with_multi_source "$BASE_URL" "$OUTPUT_FILE" "${PROXY}"; then
+    local url="${1}"
+    url="$(convert_github_url "$url" "$GITHUB_MIRROR")"
+    if ! curl -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "${dir_tmp}/${2}" "$url"; then
       echo 'error: Download failed! Please check your network or try again.'
       exit 1
     fi
-    echo "Downloading ${2}.sha256sum from multiple sources..."
-    if ! download_with_multi_source "${BASE_URL}.sha256sum" "${OUTPUT_FILE}.sha256sum" "${PROXY}"; then
+    local url_sha256sum="${1}.sha256sum"
+    url_sha256sum="$(convert_github_url "$url_sha256sum" "$GITHUB_MIRROR")"
+    if ! curl -x "${PROXY}" -R -H 'Cache-Control: no-cache' -o "${dir_tmp}/${2}.sha256sum" "$url_sha256sum"; then
       echo 'error: Download failed! Please check your network or try again.'
       exit 1
     fi
@@ -761,8 +788,8 @@ install_geodata() {
   local dir_tmp
   dir_tmp="$(mktemp -d)"
   [[ "$XRAY_IS_INSTALLED_BEFORE_RUNNING_SCRIPT" -eq '0' ]] && echo "warning: Xray was not installed"
-  download_geodata "$download_link_geoip" "$file_ip"
-  download_geodata "$download_link_geosite" "$file_dlc"
+  download_geodata $download_link_geoip $file_ip
+  download_geodata $download_link_geosite $file_dlc
   cd "${dir_tmp}" || exit
   for i in "${dir_tmp}"/*.sha256sum; do
     if ! sha256sum -c "${i}"; then
@@ -888,6 +915,11 @@ main() {
   green=$(tput setaf 2)
   aoi=$(tput setaf 6)
   reset=$(tput sgr0)
+
+  # Initialize GitHub mirror if needed
+  if [[ "$HELP" -eq '0' ]] && [[ "$REMOVE" -eq '0' ]]; then
+    init_github_mirror
+  fi
 
   # Parameter information
   [[ "$HELP" -eq '1' ]] && show_help
