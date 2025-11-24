@@ -109,7 +109,9 @@ curl() {
 add_github_proxy() {
   local url="$1"
   if [[ -n "$GITHUB_PROXY" ]] && [[ "$url" == *"github.com"* ]]; then
-    echo "${GITHUB_PROXY}${url}"
+    # 确保代理地址以 / 结尾，避免拼接错误
+    local proxy="${GITHUB_PROXY%/}"
+    echo "${proxy}/${url}"
   else
     echo "$url"
   fi

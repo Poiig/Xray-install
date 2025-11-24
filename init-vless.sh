@@ -160,7 +160,9 @@ echo "正在安装Xray..."
 
 # 使用传入的代理地址或默认值构建下载 URL
 GITHUB_RAW_URL="https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh"
-DOWNLOAD_URL="${GITHUB_PROXY}${GITHUB_RAW_URL}"
+# 确保代理地址以 / 结尾，避免拼接错误
+GITHUB_PROXY_NORMALIZED="${GITHUB_PROXY%/}"
+DOWNLOAD_URL="${GITHUB_PROXY_NORMALIZED}/${GITHUB_RAW_URL}"
 TEMP_SCRIPT="/tmp/install-release.sh"
 
 echo "使用 GitHub 代理: $GITHUB_PROXY"
