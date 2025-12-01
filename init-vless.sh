@@ -113,7 +113,7 @@ echo "正在安装Xray..."
 
 # 使用传入的代理地址或默认值构建下载 URL
 # 直接硬编码原始 URL，避免环境变量影响
-readonly RAW_SCRIPT_URL="https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/main/install-release.sh"
+readonly RAW_SCRIPT_URL="https://raw.githubusercontent.com/Poiig/Xray-install/refs/heads/1.0/install-release.sh"
 # 确保代理地址以 / 结尾，避免拼接错误
 GITHUB_PROXY_NORMALIZED="${GITHUB_PROXY%/}"
 DOWNLOAD_URL="${GITHUB_PROXY_NORMALIZED}/${RAW_SCRIPT_URL}"
