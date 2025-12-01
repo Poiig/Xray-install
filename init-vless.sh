@@ -66,84 +66,37 @@ if systemctl is-active --quiet xray || command -v xray &>/dev/null; then
           PUBKEY=""
         fi
         
-        # 提取两个dokodemo端口
-        DOKODEMO_PORTS=$(grep -B 5 -A 10 '"tag":\s*"dokodemo-in' "$CONFIG_PATH" | grep -oP '"port":\s*\K[0-9]+' | head -n2)
-        PORT_COUNT=$(echo "$DOKODEMO_PORTS" | wc -l)
+        # 提取mmm端口
+        MMM_PORT_EXISTING=$(grep -B 5 -A 10 '"tag":\s*"mmm-in' "$CONFIG_PATH" | grep -oP '"port":\s*\K[0-9]+' | head -n1)
         
-        # 提取两个vless配置的SNI和ShortID
-        # 第一个vless (端口4431)
-        SNI1_EXISTING=$(grep -B 30 '"port":\s*4431' "$CONFIG_PATH" | grep -A 5 '"serverNames"' | grep -oP '"\K[^"]+' | head -n1)
-        SHORTID1_EXISTING=$(grep -B 30 '"port":\s*4431' "$CONFIG_PATH" | grep -A 3 '"shortIds"' | grep -oP '"\K[^"]+' | grep -v "^$" | head -n1)
-        # 第二个vless (端口4432)
-        SNI2_EXISTING=$(grep -B 30 '"port":\s*4432' "$CONFIG_PATH" | grep -A 5 '"serverNames"' | grep -oP '"\K[^"]+' | head -n1)
-        SHORTID2_EXISTING=$(grep -B 30 '"port":\s*4432' "$CONFIG_PATH" | grep -A 3 '"shortIds"' | grep -oP '"\K[^"]+' | grep -v "^$" | head -n1)
+        # 提取vless配置的SNI和ShortID (端口4431)
+        SNI_EXISTING=$(grep -B 30 '"port":\s*4431' "$CONFIG_PATH" | grep -A 5 '"serverNames"' | grep -oP '"\K[^"]+' | head -n1)
+        SHORTID_EXISTING=$(grep -B 30 '"port":\s*4431' "$CONFIG_PATH" | grep -A 3 '"shortIds"' | grep -oP '"\K[^"]+' | grep -v "^$" | head -n1)
         
-        [ -z "$SNI1_EXISTING" ] && SNI1_EXISTING="www.sjtu.edu.cn"
-        [ -z "$SNI2_EXISTING" ] && SNI2_EXISTING="www.fudan.edu.cn"
+        [ -z "$SNI_EXISTING" ] && SNI_EXISTING="www.microsoft.com"
         
         # 输出配置信息和节点链接
         echo
-        if [ "$PORT_COUNT" -ge 2 ]; then
-          DOKODEMO_PORT1_EXISTING=$(echo "$DOKODEMO_PORTS" | head -n1)
-          DOKODEMO_PORT2_EXISTING=$(echo "$DOKODEMO_PORTS" | tail -n1)
-          
-          # 生成节点链接
-          if [ -n "$PUBKEY" ] && [ -n "$SHORTID1_EXISTING" ] && [ -n "$SHORTID2_EXISTING" ]; then
-            VLESS_LINK1_EXISTING="vless://$UUID@$IP:$DOKODEMO_PORT1_EXISTING?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI1_EXISTING&fp=chrome&pbk=$PUBKEY&sid=$SHORTID1_EXISTING&type=tcp#$IP-$DOKODEMO_PORT1_EXISTING"
-            VLESS_LINK2_EXISTING="vless://$UUID@$IP:$DOKODEMO_PORT2_EXISTING?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI2_EXISTING&fp=chrome&pbk=$PUBKEY&sid=$SHORTID2_EXISTING&type=tcp#$IP-$DOKODEMO_PORT2_EXISTING"
-            echo "节点链接 1（$SNI1_EXISTING）："
-            echo "$VLESS_LINK1_EXISTING"
-            echo
-            echo "节点链接 2（$SNI2_EXISTING）："
-            echo "$VLESS_LINK2_EXISTING"
-            echo "$VLESS_LINK1_EXISTING" > vless_link1.txt
-            echo "$VLESS_LINK2_EXISTING" > vless_link2.txt
-            echo "(节点链接已写入 vless_link1.txt 和 vless_link2.txt)"
-            echo
-          fi
-          
-          echo "配置详情："
-          echo "  地址: $IP"
-          echo "  外部端口1: $DOKODEMO_PORT1_EXISTING (dokodemo-door)"
-          echo "  外部端口2: $DOKODEMO_PORT2_EXISTING (dokodemo-door)"
-          echo "  内部端口: 4431, 4432 (vless)"
-          echo "  UUID: $UUID"
-          echo "  加密: none"
-          echo "  流控: xtls-rprx-vision"
-          echo "  安全: reality"
-          echo "  入口1 SNI: $SNI1_EXISTING"
-          echo "  入口1 ShortID: $SHORTID1_EXISTING"
-          echo "  入口2 SNI: $SNI2_EXISTING"
-          echo "  入口2 ShortID: $SHORTID2_EXISTING"
-          echo "  公钥: $PUBKEY"
-        else
-          DOKODEMO_PORT_EXISTING=$(echo "$DOKODEMO_PORTS" | head -n1)
-          SHORTID_EXISTING=$(grep -A 3 '"shortIds"' "$CONFIG_PATH" | grep -oP '"\K[^"]+' | grep -v "^$" | head -n1)
-          SNI_EXISTING=$(grep -A 5 '"serverNames"' "$CONFIG_PATH" | grep -oP '"\K[^"]+' | head -n1)
-          [ -z "$SNI_EXISTING" ] && SNI_EXISTING="www.sjtu.edu.cn"
-          
-          if [ -n "$PUBKEY" ] && [ -n "$SHORTID_EXISTING" ]; then
-            VLESS_LINK_EXISTING="vless://$UUID@$IP:$DOKODEMO_PORT_EXISTING?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI_EXISTING&fp=chrome&pbk=$PUBKEY&sid=$SHORTID_EXISTING&type=tcp#$IP-$DOKODEMO_PORT_EXISTING"
-            echo "节点链接："
-            echo "$VLESS_LINK_EXISTING"
-            echo "$VLESS_LINK_EXISTING" > vless_link.txt
-            echo "(节点链接已写入 vless_link.txt)"
-            echo
-          fi
-          
-          echo "配置详情："
-          echo "  地址: $IP"
-          echo "  外部端口: $DOKODEMO_PORT_EXISTING (dokodemo-door)"
-          echo "  内部端口: 4431, 4432 (vless)"
-          echo "  UUID: $UUID"
-          echo "  加密: none"
-          echo "  流控: xtls-rprx-vision"
-          echo "  安全: reality"
-          SNI_LIST=$(grep -A 5 '"serverNames"' "$CONFIG_PATH" | grep -oP '"\K[^"]+' | sort -u | tr '\n' ' ')
-          echo "  SNI: $SNI_LIST"
-          echo "  公钥: $PUBKEY"
-          echo "  ShortID: $SHORTID_EXISTING"
+        if [ -n "$PUBKEY" ] && [ -n "$SHORTID_EXISTING" ]; then
+          VLESS_LINK_EXISTING="vless://$UUID@$IP:$MMM_PORT_EXISTING?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI_EXISTING&fp=chrome&pbk=$PUBKEY&sid=$SHORTID_EXISTING&type=tcp#$IP-$MMM_PORT_EXISTING"
+          echo "节点链接："
+          echo "$VLESS_LINK_EXISTING"
+          echo "$VLESS_LINK_EXISTING" > vless_link.txt
+          echo "(节点链接已写入 vless_link.txt)"
+          echo
         fi
+        
+        echo "配置详情："
+        echo "  地址: $IP"
+        echo "  外部端口: $MMM_PORT_EXISTING (mmm-door)"
+        echo "  内部端口: 4431 (vless)"
+        echo "  UUID: $UUID"
+        echo "  加密: none"
+        echo "  流控: xtls-rprx-vision"
+        echo "  安全: reality"
+        echo "  SNI: $SNI_EXISTING"
+        echo "  ShortID: $SHORTID_EXISTING"
+        echo "  公钥: $PUBKEY"
         echo
       else
         echo "未找到配置文件 $CONFIG_PATH，无法输出节点链接。"
@@ -326,35 +279,24 @@ if [ ${#PUBKEY} -lt 40 ] || [ ${#PUBKEY} -gt 50 ]; then
   exit 1
 fi
 
-SHORTID1=$(openssl rand -hex 8)
-SHORTID2=$(openssl rand -hex 8)
-SNI1="www.sjtu.edu.cn"
-SNI2="www.fudan.edu.cn"
+SHORTID=$(openssl rand -hex 8)
+SNI="www.microsoft.com"
 
 echo "✅ UUID和REALITY密钥生成成功"
 
-# 生成两个随机外部端口（1025-65535，排除常见端口）
-EXCLUDE_PORTS=(21 22 80 443 8080 8443 8000 8888 9000 4431 4432)
-# 生成第一个外部端口
+# 生成随机外部端口（1025-65535，排除常见端口）
+EXCLUDE_PORTS=(21 22 80 443 8080 8443 8000 8888 9000 4431)
+# 生成外部端口
 while :; do
-  DOKODEMO_PORT1=$((RANDOM%64511+1025))
-  if [[ ! " ${EXCLUDE_PORTS[*]} " =~ " ${DOKODEMO_PORT1} " ]]; then
-    if ! ss -tuln | grep -q ":${DOKODEMO_PORT1} "; then
-      break
-    fi
-  fi
-done
-# 生成第二个外部端口（确保与第一个不同）
-while :; do
-  DOKODEMO_PORT2=$((RANDOM%64511+1025))
-  if [[ "$DOKODEMO_PORT2" != "$DOKODEMO_PORT1" ]] && [[ ! " ${EXCLUDE_PORTS[*]} " =~ " ${DOKODEMO_PORT2} " ]]; then
-    if ! ss -tuln | grep -q ":${DOKODEMO_PORT2} "; then
+  MMM_PORT=$((RANDOM%64511+1025))
+  if [[ ! " ${EXCLUDE_PORTS[*]} " =~ " ${MMM_PORT} " ]]; then
+    if ! ss -tuln | grep -q ":${MMM_PORT} "; then
       break
     fi
   fi
 done
 
-# 检查内部端口4431和4432是否被占用
+# 检查内部端口4431是否被占用
 if ss -tuln | grep -q ":4431 "; then
   echo "⚠️  警告：端口4431已被占用，可能会影响vless服务！"
   read -p "是否继续？(y/n): " continue_4431
@@ -364,18 +306,9 @@ if ss -tuln | grep -q ":4431 "; then
   fi
 fi
 
-if ss -tuln | grep -q ":4432 "; then
-  echo "⚠️  警告：端口4432已被占用，可能会影响vless服务！"
-  read -p "是否继续？(y/n): " continue_4432
-  if [ "$continue_4432" != "y" ] && [ "$continue_4432" != "Y" ]; then
-    echo "安装已取消。"
-    exit 1
-  fi
-fi
+echo "✅ 已生成随机外部端口: $MMM_PORT (对应 $SNI)"
 
-echo "✅ 已生成随机外部端口: $DOKODEMO_PORT1 (对应 $SNI1), $DOKODEMO_PORT2 (对应 $SNI2)"
-
-# 写入Xray配置文件（包含dokodemo-door和vless，带路由规则）
+# 写入Xray配置文件（包含mmm-door和vless，带路由规则）
 CONFIG_PATH="/usr/local/etc/xray/config.json"
 
 # 创建日志目录并设置权限（配置文件使用 /var/log/xray/）
@@ -429,27 +362,12 @@ cat > $CONFIG_PATH <<EOF
   },
   "inbounds": [
     {
-      "tag": "dokodemo-in1",
-      "port": $DOKODEMO_PORT1,
-      "protocol": "dokodemo-door",
+      "tag": "mmm-in",
+      "port": $MMM_PORT,
+      "protocol": "mmm-door",
       "settings": {
         "address": "127.0.0.1",
         "port": 4431,
-        "network": "tcp"
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["tls"],
-        "routeOnly": true
-      }
-    },
-    {
-      "tag": "dokodemo-in2",
-      "port": $DOKODEMO_PORT2,
-      "protocol": "dokodemo-door",
-      "settings": {
-        "address": "127.0.0.1",
-        "port": 4432,
         "network": "tcp"
       },
       "sniffing": {
@@ -475,39 +393,10 @@ cat > $CONFIG_PATH <<EOF
         "network": "tcp",
         "security": "reality",
         "realitySettings": {
-          "dest": "$SNI1:443",
-          "serverNames": ["$SNI1"],
+          "dest": "$SNI:443",
+          "serverNames": ["$SNI"],
           "privateKey": "$PRIVKEY",
-          "shortIds": ["$SHORTID1"]
-        }
-      },
-      "sniffing": {
-        "enabled": true,
-        "destOverride": ["http", "tls", "quic"],
-        "routeOnly": true
-      }
-    },
-    {
-      "listen": "127.0.0.1",
-      "port": 4432,
-      "protocol": "vless",
-      "settings": {
-        "clients": [
-          {
-            "id": "$UUID",
-            "flow": "xtls-rprx-vision"
-          }
-        ],
-        "decryption": "none"
-      },
-      "streamSettings": {
-        "network": "tcp",
-        "security": "reality",
-        "realitySettings": {
-          "dest": "$SNI2:443",
-          "serverNames": ["$SNI2"],
-          "privateKey": "$PRIVKEY",
-          "shortIds": ["$SHORTID2"]
+          "shortIds": ["$SHORTID"]
         }
       },
       "sniffing": {
@@ -531,21 +420,12 @@ cat > $CONFIG_PATH <<EOF
   "routing": {
     "rules": [
       {
-        "inboundTag": ["dokodemo-in1"],
-        "domain": ["$SNI1"],
+        "inboundTag": ["mmm-in"],
+        "domain": ["$SNI"],
         "outboundTag": "direct"
       },
       {
-        "inboundTag": ["dokodemo-in1"],
-        "outboundTag": "block"
-      },
-      {
-        "inboundTag": ["dokodemo-in2"],
-        "domain": ["$SNI2"],
-        "outboundTag": "direct"
-      },
-      {
-        "inboundTag": ["dokodemo-in2"],
+        "inboundTag": ["mmm-in"],
         "outboundTag": "block"
       }
     ]
@@ -590,27 +470,21 @@ else
 fi
 
 # 生成节点链接
-VLESS_LINK1="vless://$UUID@$IP:$DOKODEMO_PORT1?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI1&fp=chrome&pbk=$PUBKEY&sid=$SHORTID1&type=tcp#$IP-$DOKODEMO_PORT1"
-VLESS_LINK2="vless://$UUID@$IP:$DOKODEMO_PORT2?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI2&fp=chrome&pbk=$PUBKEY&sid=$SHORTID2&type=tcp#$IP-$DOKODEMO_PORT2"
+VLESS_LINK="vless://$UUID@$IP:$MMM_PORT?encryption=none&flow=xtls-rprx-vision&security=reality&sni=$SNI&fp=chrome&pbk=$PUBKEY&sid=$SHORTID&type=tcp#$IP-$MMM_PORT"
 
 # 输出配置信息
 echo
-echo "✅ VLESS+REALITY+Dokodemo-Door 双端口节点配置完成！"
+echo "✅ VLESS+REALITY+MMM-Door 节点配置完成！"
 echo "以下信息可用于Passwall客户端（也支持Shadowrocket等）："
 echo
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  节点链接 1（$SNI1）："
-echo "$VLESS_LINK1"
-echo
-echo "  节点链接 2（$SNI2）："
-echo "$VLESS_LINK2"
+echo "  节点链接（$SNI）："
+echo "$VLESS_LINK"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo
 # 保存节点链接到文件
-echo "$VLESS_LINK1" > vless_link1.txt
-echo "$VLESS_LINK2" > vless_link2.txt
-echo "(节点链接1已写入 vless_link1.txt)"
-echo "(节点链接2已写入 vless_link2.txt)"
+echo "$VLESS_LINK" > vless_link.txt
+echo "(节点链接已写入 vless_link.txt)"
 echo
 echo "配置详情："
 echo "  公网IP: $IP"
@@ -618,21 +492,11 @@ echo "  UUID: $UUID"
 echo "  公钥: $PUBKEY"
 echo
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo "  入口 1："
-echo "    外部端口: $DOKODEMO_PORT1 (dokodemo-door)"
+echo "  入口："
+    echo "    外部端口: $MMM_PORT (mmm-door)"
 echo "    内部端口: 4431 (vless，监听127.0.0.1)"
-echo "    目标域名: $SNI1"
-echo "    ShortID: $SHORTID1"
-echo "    加密: none"
-echo "    流控: xtls-rprx-vision"
-echo "    安全: reality"
-echo "    指纹: chrome"
-echo
-echo "  入口 2："
-echo "    外部端口: $DOKODEMO_PORT2 (dokodemo-door)"
-echo "    内部端口: 4432 (vless，监听127.0.0.1)"
-echo "    目标域名: $SNI2"
-echo "    ShortID: $SHORTID2"
+echo "    目标域名: $SNI"
+echo "    ShortID: $SHORTID"
 echo "    加密: none"
 echo "    流控: xtls-rprx-vision"
 echo "    安全: reality"
@@ -640,39 +504,25 @@ echo "    指纹: chrome"
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo
 echo "配置详情（Passwall手动配置用）："
-echo "  入口1："
-echo "    地址: $IP"
-echo "    端口: $DOKODEMO_PORT1"
-echo "    UUID: $UUID"
-echo "    加密: none"
-echo "    流控: xtls-rprx-vision"
-echo "    安全: reality"
-echo "    SNI: $SNI1"
-echo "    指纹: chrome"
-echo "    公钥: $PUBKEY"
-echo "    ShortID: $SHORTID1"
-echo
-echo "  入口2："
-echo "    地址: $IP"
-echo "    端口: $DOKODEMO_PORT2"
-echo "    UUID: $UUID"
-echo "    加密: none"
-echo "    流控: xtls-rprx-vision"
-echo "    安全: reality"
-echo "    SNI: $SNI2"
-echo "    指纹: chrome"
-echo "    公钥: $PUBKEY"
-echo "    ShortID: $SHORTID2"
+echo "  地址: $IP"
+  echo "  端口: $MMM_PORT"
+echo "  UUID: $UUID"
+echo "  加密: none"
+echo "  流控: xtls-rprx-vision"
+echo "  安全: reality"
+echo "  SNI: $SNI"
+echo "  指纹: chrome"
+echo "  公钥: $PUBKEY"
+echo "  ShortID: $SHORTID"
 echo
 echo "路由规则："
-echo "  - 入口1：访问 $SNI1 的流量将直接放行，其他流量将被阻止"
-echo "  - 入口2：访问 $SNI2 的流量将直接放行，其他流量将被阻止"
+echo "  - 访问 $SNI 的流量将直接放行，其他流量将被阻止"
 echo
 echo "日志级别: debug"
 echo "日志文件: /var/log/xray/access.log 和 error.log"
 echo
-echo "⚠️  注意：此配置使用两个独立的dokodemo-door端口接收流量，"
-echo "   分别转发到内部vless服务。请确保防火墙允许端口 $DOKODEMO_PORT1 和 $DOKODEMO_PORT2。"
+echo "⚠️  注意：此配置使用mmm-door端口接收流量，"
+echo "   转发到内部vless服务。请确保防火墙允许端口 $MMM_PORT。"
 echo
 echo "保存以上信息到Passwall，建议定期更换UUID和ShortID以提升安全性！"
 
