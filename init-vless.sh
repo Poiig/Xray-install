@@ -254,8 +254,8 @@ cat > $CONFIG_PATH <<EOF
 {
   "log": {
     "loglevel": "warning",
-    "access": "/usr/local/var/log/xray/access.log",
-    "error": "/usr/local/var/log/xray/error.log"
+    "access": "/var/log/xray/access.log",
+    "error": "/var/log/xray/error.log"
   },
   "inbounds": [
     {
