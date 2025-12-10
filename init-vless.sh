@@ -265,8 +265,7 @@ cat > $CONFIG_PATH <<EOF
         "clients": [
           {
             "id": "$UUID",
-            "flow": "xtls-rprx-vision",
-            "email": "passwall@example.com"
+            "flow": "xtls-rprx-vision"
           }
         ],
         "decryption": "none"
