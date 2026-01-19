@@ -253,7 +253,7 @@ fi
 cat > $CONFIG_PATH <<EOF
 {
   "log": {
-    "loglevel": "warning",
+    "loglevel": "info",
     "access": "/var/log/xray/access.log",
     "error": "/var/log/xray/error.log"
   },
@@ -298,13 +298,35 @@ EOF
 chmod 600 $CONFIG_PATH
 chown xray:xray $CONFIG_PATH
 
+# 确保日志目录存在
+mkdir -p /var/log/xray
+chown xray:xray /var/log/xray 2>/dev/null || chown root:root /var/log/xray 2>/dev/null
+
 # 重启Xray服务
+echo "正在启动Xray服务..."
 systemctl restart xray
-if systemctl is-active --quiet xray; then
-  systemctl enable xray
+sleep 2
+
+# 如果启动失败，清理日志并重试
+if ! systemctl is-active --quiet xray; then
+  echo "⚠️  Xray服务启动失败，正在清理日志并重试..."
+  rm -rf /var/log/xray/*
+  systemctl restart xray
+  sleep 2
+  
+  # 再次检查状态
+  if systemctl is-active --quiet xray; then
+    echo "✅ 清理日志后Xray服务启动成功！"
+    systemctl enable xray
+  else
+    echo "❌ 错误：Xray服务启动失败，请检查配置！"
+    echo "查看服务状态："
+    systemctl status xray --no-pager -l
+    exit 1
+  fi
 else
-  echo "错误：Xray服务启动失败，请检查配置！"
-  exit 1
+  systemctl enable xray
+  echo "✅ Xray服务启动成功！"
 fi
 # 输出节点信息
 echo
@@ -330,3 +352,51 @@ echo "  公钥: $PUBKEY"
 echo "  ShortID: $SHORTID"
 echo
 echo "保存以上信息到Passwall，建议定期更换UUID和ShortID以提升安全性！"
+echo
+
+# 配置日志归档
+echo "正在配置日志归档..."
+LOGROTATE_FILE="/etc/logrotate.d/xray"
+cat > "$LOGROTATE_FILE" <<'LOGROTATE_EOF'
+/var/log/xray/*.log {
+    daily
+    rotate 7
+    dateext
+    dateformat -%Y%m%d
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}
+LOGROTATE_EOF
+
+chmod 644 "$LOGROTATE_FILE"
+echo "✅ 日志归档配置完成！日志将每天轮转，保留7天。"
+
+# 询问是否开启加速
+echo
+read -p "是否要开启网络加速（BBR/BBR Plus）？(y/n): " enable_accel
+if [ "$enable_accel" = "y" ] || [ "$enable_accel" = "Y" ]; then
+  echo "正在下载加速脚本..."
+  ACCEL_SCRIPT="./tcp.sh"
+  if wget -N --no-check-certificate "https://ghfast.top/https://raw.githubusercontent.com/chiakge/Linux-NetSpeed/master/tcp.sh" -O "$ACCEL_SCRIPT" 2>/dev/null; then
+    chmod +x "$ACCEL_SCRIPT"
+    echo "✅ 加速脚本下载成功！"
+    echo "⚠️  注意：执行加速脚本可能需要重启服务器，请确认后再继续。"
+    echo "正在执行加速脚本，请根据提示输入选项..."
+    "$ACCEL_SCRIPT"
+  else
+    echo "⚠️  加速脚本下载失败，您可以稍后手动下载并执行："
+    echo "  wget -N --no-check-certificate \"https://ghfast.top/https://raw.githubusercontent.com/chiakge/Linux-NetSpeed/master/tcp.sh\""
+    echo "  chmod +x tcp.sh"
+    echo "  ./tcp.sh"
+  fi
+else
+  echo "已跳过网络加速配置。"
+fi
+
+echo
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo "✅ 所有配置已完成！"
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
