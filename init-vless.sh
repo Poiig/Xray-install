@@ -250,6 +250,13 @@ if [ -f "$SERVICE_FILE" ]; then
   systemctl daemon-reload
 fi
 
+# 确保日志目录存在，服务以root运行，日志目录和文件权限应为root
+mkdir -p /var/log/xray
+chown root:root /var/log/xray
+chmod 755 /var/log/xray
+# 删除日志目录下的所有日志文件，让xray启动时自动生成
+rm -f /var/log/xray/*.log 2>/dev/null
+
 cat > $CONFIG_PATH <<EOF
 {
   "log": {
@@ -294,13 +301,9 @@ cat > $CONFIG_PATH <<EOF
 }
 EOF
 
-# 设置配置文件权限
+# 设置配置文件权限（服务以root运行，配置文件权限也应为root）
 chmod 600 $CONFIG_PATH
-chown xray:xray $CONFIG_PATH
-
-# 确保日志目录存在
-mkdir -p /var/log/xray
-chown xray:xray /var/log/xray 2>/dev/null || chown root:root /var/log/xray 2>/dev/null
+chown root:root $CONFIG_PATH
 
 # 重启Xray服务
 echo "正在启动Xray服务..."
@@ -351,8 +354,6 @@ echo "  指纹: chrome"
 echo "  公钥: $PUBKEY"
 echo "  ShortID: $SHORTID"
 echo
-echo "保存以上信息到Passwall，建议定期更换UUID和ShortID以提升安全性！"
-echo
 
 # 配置日志归档
 echo "正在配置日志归档..."
@@ -373,28 +374,6 @@ LOGROTATE_EOF
 
 chmod 644 "$LOGROTATE_FILE"
 echo "✅ 日志归档配置完成！日志将每天轮转，保留7天。"
-
-# 询问是否开启加速
-echo
-read -p "是否要开启网络加速（BBR/BBR Plus）？(y/n): " enable_accel
-if [ "$enable_accel" = "y" ] || [ "$enable_accel" = "Y" ]; then
-  echo "正在下载加速脚本..."
-  ACCEL_SCRIPT="./tcp.sh"
-  if wget -N --no-check-certificate "https://ghfast.top/https://raw.githubusercontent.com/chiakge/Linux-NetSpeed/master/tcp.sh" -O "$ACCEL_SCRIPT" 2>/dev/null; then
-    chmod +x "$ACCEL_SCRIPT"
-    echo "✅ 加速脚本下载成功！"
-    echo "⚠️  注意：执行加速脚本可能需要重启服务器，请确认后再继续。"
-    echo "正在执行加速脚本，请根据提示输入选项..."
-    "$ACCEL_SCRIPT"
-  else
-    echo "⚠️  加速脚本下载失败，您可以稍后手动下载并执行："
-    echo "  wget -N --no-check-certificate \"https://ghfast.top/https://raw.githubusercontent.com/chiakge/Linux-NetSpeed/master/tcp.sh\""
-    echo "  chmod +x tcp.sh"
-    echo "  ./tcp.sh"
-  fi
-else
-  echo "已跳过网络加速配置。"
-fi
 
 echo
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
